@@ -57,32 +57,33 @@ String chip_command(String chip_command, byte chip_address, int read_delay, int 
 	Wire.beginTransmission(chip_address); 	// signal beginning of transmit
 	Wire.write(chip_command);      	 	// transmit command
 	Wire.endTransmission();    		// signal end of transmission
+	delay(read_delay);			// wait for chip to process command
 
-	if ( response_size > 0 )		// if a response is expected 
-	{
-		delay(read_delay);			// wait for chip to process command
-		Wire.requestFrom(chip_address, response_size); // request data from sensor
-		response_code = Wire.read();	// get first byte which contains response code from chip
-		switch (response_code) {
-			case 1: 			// if first byte is 1, command was successful
-				for (int byte_num = 0; byte_num < response_size - 1; byte_num = byte_num + 1) {
-					// and pull data off the bus one byte at a time
-					reading[byte_num] = Wire.read();
-				}
-				response_data = String(reading);
-				break;
-			case 2:			// if first byte is 2, the request failed
-				response_data = "Request Failed";
-				break;
-			case 254:		// if first byte is 254, the request is still being processed
-				response_data = "Pending - the request is still being processed. Ensure that you have waited the minimum time to guarantee a repsonse";
-				break;
-			case 255:		// if first byte is 255, there is no pending request/data available.
-				response_data = "No Data - there is no pending request, so there is no data to return from the circuit";
-				break;
-		}
+	// if response size is zero, no response is expected so return with no data
+	if (response_size == 0) {
+		return response_data;
 	}
 
+	Wire.requestFrom(chip_address, response_size); // request data from sensor
+	response_code = Wire.read();	// get first byte which contains response code from chip
+	switch (response_code) {
+		case 1: 			// if first byte is 1, command was successful
+			for (int byte_num = 0; byte_num < response_size - 1; byte_num = byte_num + 1) {
+				// and pull data off the bus one byte at a time
+				reading[byte_num] = Wire.read();
+			}
+			response_data = String(reading);
+			break;
+		case 2:			// if first byte is 2, the request failed
+			response_data = "Request Failed";
+			break;
+		case 254:		// if first byte is 254, the request is still being processed
+			response_data = "Pending - the request is still being processed. Ensure that you have waited the minimum time to guarantee a repsonse";
+			break;
+		case 255:		// if first byte is 255, there is no pending request/data available.
+			response_data = "No Data - there is no pending request, so there is no data to return from the circuit";
+			break;
+	}
 	return response_data;
 }
 
