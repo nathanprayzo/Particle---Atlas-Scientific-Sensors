@@ -1,6 +1,22 @@
 #include "math.h"
 
-//trivial change
+//Uncomment the line below to enable serial debugging
+//#define DEBUG_ENABLED
+
+// Provides easy enable/disable debugging mechanism
+#ifdef DEBUG_ENABLED
+	#define DEBUG_PRINT(str)    \
+	Serial.print(millis());     \
+	Serial.print(": ");    \
+	Serial.print(__PRETTY_FUNCTION__); \
+	Serial.print(' ');      \
+	Serial.print(__LINE__);     \
+	Serial.print(' ');      \
+	Serial.println(str);
+#else
+	#define DEBUG_PRINT(str)
+#endif
+
 // enable SRAM feature for preserving variables between deep sleep modes
 STARTUP(System.enableFeature(FEATURE_RETAINED_MEMORY));
 
@@ -130,7 +146,7 @@ void chip_sleep(struct atlas_chip chip)
 // wake chip up from sleep
 void chip_wake(struct atlas_chip chip)
 {
-	Serial.println("Waking up " + String(chip.type) + " chip");
+	DEBUG_PRINT("Waking up " + String(chip.type) + " chip");
 	// After chip is woken up, 4 consecutive readings should be taken before
 	//    the readings are considered valid.
 	int required_readings = 4;
@@ -140,7 +156,7 @@ void chip_wake(struct atlas_chip chip)
 		required_readings = 16;
 	}
 
-	Serial.println("Dumping " + String(required_readings) + " readings");
+	DEBUG_PRINT("Dumping " + String(required_readings) + " readings");
 	for (int reading = 0; reading < required_readings; reading++)
 	{
 		chip_command("R", chip.address, 1000, 0);
@@ -150,54 +166,48 @@ void chip_wake(struct atlas_chip chip)
 // Setup
 void setup()
 {
-	Serial.println("device_id: " + device_id);
+	DEBUG_PRINT("Start of setup()");
 	if (device_id == "") {
-		Serial.println("device id not in sram, pulling from cloud");
 		device_id = Particle.deviceID();  // get device id from particle cloud
-		Serial.println("got: " + device_id);
+		DEBUG_PRINT("Did not find device id in sram so got it from cloud: " + device_id);
 	}else {
-		Serial.println("found device id in sram: " + device_id);
+		DEBUG_PRINT("found device id in sram: " + device_id);
 	}
   	udp_client.begin(udp_local_port); // start udp client on specified port (NEED2: extract port to cloud data point)
 	Wire.begin(); 			// Initiate the Wire library and join the I2C bus as a master or slave 
-	Serial.begin(9600);		// This channel communicates through the USB port and when connected to a computer, will show up as a virtual COM port.
-	Serial.println("Starting up, last reading from sram is: " + String(last_reading));
 
-	Wire.beginTransmission(ph_chip.address);   // signal beginning of transmit
-	Wire.write("L,1");               		// transmit command
-	Wire.endTransmission();                 	// signal end of transmission
-	delay(300);
-	Wire.beginTransmission(ph_chip.address);   // signal beginning of transmit
-	Wire.write("L,0");               		// transmit command
-	Wire.endTransmission();                 	// signal end of transmission
-	delay(300);
-	Wire.beginTransmission(ph_chip.address);   // signal beginning of transmit
-	Wire.write("L,1");               		// transmit command
-	Wire.endTransmission();                 	// signal end of transmission
-	delay(300);
+	#ifdef DEBUG_ENABLED		// if debugging is enabled start serial and turn on atlas chip debug led
+		Serial.begin(9600);			// This channel communicates through the USB port and when connected to a computer, will show up as a virtual COM port.
+		Wire.beginTransmission(ph_chip.address);   // signal beginning of transmit
+		Wire.write("L,1");               		// turn on atlas debug led
+		Wire.endTransmission();                 	// signal end of transmission
+	#else
+		Wire.beginTransmission(ph_chip.address);   // signal beginning of transmit
+		Wire.write("L,0");               		// turn off atlas debug led
+		Wire.endTransmission();                 	// signal end of transmission
+	#endif
 }
 
 // Main loop
 void loop()
 {
-	Serial.println("Waking up chip");
+	DEBUG_PRINT("Start of loop()");
+	DEBUG_PRINT("Waking up atlas chip from low power state");
 	chip_wake(ph_chip);
-	Serial.println("Last reading: " + String(last_reading));
+	DEBUG_PRINT("Last reading: " + String(last_reading));
 	get_reading(&ph_chip);
-	Serial.println("This reading: " + ph_chip.data);
+	DEBUG_PRINT("This reading: " + ph_chip.data);
 
 	// only update last reading and publish data if change is > 
 	if ( fabs ( atof(ph_chip.data) - last_reading ) > delta_to_publish ) {
 		last_reading = atof(ph_chip.data);
-		Serial.println("Detected sensor change greater than configured delta");
-		Serial.println("Updating EEPROM with last sensor reading");
+		DEBUG_PRINT("New sensor reading differs from last reading more than configured delta");
 		publish_data(ph_chip.data);
 	}
 
-	Serial.println("Putting chip to sleep");
+	DEBUG_PRINT("Putting atlas chip into low power mode");
 	chip_sleep(ph_chip);
-	delay(15000);
-	Serial.println("Sleeping for 10 seconds");
-	//System.sleep(SLEEP_MODE_DEEP,300000, SLEEP_NETWORK_STANDBY);
+	DEBUG_PRINT("Putting electron into deep sleep");
+	System.sleep(SLEEP_MODE_DEEP,900, SLEEP_NETWORK_STANDBY);
 }
 
