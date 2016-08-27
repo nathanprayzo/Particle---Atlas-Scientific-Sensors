@@ -1,5 +1,6 @@
 #include "math.h"
 
+//trivial change
 // enable SRAM feature for preserving variables between deep sleep modes
 STARTUP(System.enableFeature(FEATURE_RETAINED_MEMORY));
 
